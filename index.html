@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budget Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f7fa; --surface: #ffffff; --ink: #1a2233; --muted: #7a869a;
+    --line: #e6eaf0; --in: #14a06e; --out: #e5573f; --accent: #2b6fb0; --radius: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--ink); line-height: 1.4;
+    padding: 20px; display: flex; justify-content: center;
+  }
+  .app { width: 100%; max-width: 440px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 16px; }
+  .balance-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 24px; margin-bottom: 16px;
+  }
+  .balance-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .balance-amount {
+    font-size: 40px; font-weight: 700; letter-spacing: -1px;
+    margin: 4px 0 12px; font-variant-numeric: tabular-nums;
+  }
+  .balance-amount.negative { color: var(--out); }
+  .breakdown { display: flex; gap: 20px; font-size: 14px; }
+  .breakdown span { color: var(--muted); }
+  .breakdown b { font-variant-numeric: tabular-nums; }
+  .breakdown .in b { color: var(--in); }
+  .breakdown .out b { color: var(--out); }
+  .form-card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 16px; margin-bottom: 16px;
+    display: grid; gap: 10px;
+  }
+  input, select, button { font-family: inherit; font-size: 15px; }
+  input, select {
+    width: 100%; padding: 11px 12px; border: 1px solid var(--line);
+    border-radius: 10px; color: var(--ink); background: var(--bg);
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+  button {
+    cursor: pointer; border: none; border-radius: 10px; padding: 12px;
+    font-weight: 600; background: var(--accent); color: #fff;
+  }
+  button:hover { filter: brightness(1.05); }
+  .error { color: var(--out); font-size: 13px; min-height: 0; }
+  .list-title { font-size: 14px; color: var(--muted); font-weight: 600; margin: 4px 0 8px; }
+  .txn {
+    display: flex; align-items: center; gap: 12px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .txn .desc { flex: 1; font-weight: 500; }
+  .txn .amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .txn .amt.in { color: var(--in); }
+  .txn .amt.out { color: var(--out); }
+  .txn .del {
+    background: none; color: var(--muted); padding: 4px 6px; font-size: 16px;
+    border-radius: 6px; width: auto; font-weight: 400;
+  }
+  .txn .del:hover { background: var(--bg); color: var(--out); }
+  .empty {
+    text-align: center; color: var(--muted); font-size: 14px;
+    padding: 28px 12px; border: 1px dashed var(--line); border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <h1>Budget Tracker</h1>
+    <div class="balance-card">
+      <div class="balance-label">Balance</div>
+      <div class="balance-amount" id="balance">$0.00</div>
+      <div class="breakdown">
+        <span class="in">in <b id="totalIn">$0.00</b></span>
+        <span class="out">out <b id="totalOut">$0.00</b></span>
+      </div>
+    </div>
+    <div class="form-card">
+      <input id="desc" type="text" placeholder="What was it? (e.g. Groceries)">
+      <div class="row">
+        <input id="amount" type="number" step="0.01" min="0" placeholder="Amount">
+        <select id="type">
+          <option value="expense">Expense</option>
+          <option value="income">Income</option>
+        </select>
+      </div>
+      <div class="error" id="error"></div>
+      <button id="addBtn">Add transaction</button>
+    </div>
+    <div class="list-title">Recent</div>
+    <div id="list"></div>
+  </div>
+
+<script>
+  let transactions = [];
+  const STORAGE_KEY = 'transactions';
+  const $ = (id) => document.getElementById(id);
+  const money = (n) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+  }
+
+  function load() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    transactions = saved ? JSON.parse(saved) : [];
+  }
+
+  function addTransaction() {
+    const desc = $('desc').value.trim();
+    const amount = parseFloat($('amount').value);
+    const type = $('type').value;
+    const error = $('error');
+    if (!desc) { error.textContent = 'Add a short description.'; return; }
+    if (isNaN(amount) || amount <= 0) { error.textContent = 'Enter an amount greater than 0.'; return; }
+    error.textContent = '';
+    transactions.unshift({ id: Date.now(), desc, amount, type });
+    save();
+    render();
+    $('desc').value = '';
+    $('amount').value = '';
+    $('desc').focus();
+  }
+
+  function deleteTransaction(id) {
+    transactions = transactions.filter((t) => t.id !== id);
+    save();
+    render();
+  }
+
+  function render() {
+    let totalIn = 0, totalOut = 0;
+    for (const t of transactions) {
+      if (t.type === 'income') totalIn += t.amount;
+      else totalOut += t.amount;
+    }
+    const balance = totalIn - totalOut;
+    const balanceEl = $('balance');
+    balanceEl.textContent = money(balance);
+    balanceEl.classList.toggle('negative', balance < 0);
+    $('totalIn').textContent = money(totalIn);
+    $('totalOut').textContent = money(totalOut);
+
+    const list = $('list');
+    if (transactions.length === 0) {
+      list.innerHTML = '<div class="empty">No transactions yet. Add your first one above.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    for (const t of transactions) {
+      const sign = t.type === 'income' ? '+' : '-';
+      const cls  = t.type === 'income' ? 'in' : 'out';
+      const row = document.createElement('div');
+      row.className = 'txn';
+      row.innerHTML = `
+        <span class="desc">${escapeHtml(t.desc)}</span>
+        <span class="amt ${cls}">${sign}${money(t.amount)}</span>
+        <button class="del" title="Delete">✕</button>
+      `;
+      row.querySelector('.del').addEventListener('click', () => deleteTransaction(t.id));
+      list.appendChild(row);
+    }
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  $('addBtn').addEventListener('click', addTransaction);
+  $('amount').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); });
+
+  function init() {
+    load();
+    render();
+  }
+  init();
+</script>
+</body>
+</html>
